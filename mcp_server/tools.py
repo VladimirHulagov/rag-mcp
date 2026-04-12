@@ -33,16 +33,16 @@ def search_library(
 
     search_filter = Filter(must=must) if must else None
 
-    results = client.search(
+    response = client.query_points(
         collection_name=name,
-        query_vector=query_vector,
+        query=query_vector,
         limit=top_k,
         query_filter=search_filter,
         with_payload=True,
     )
 
     hits = []
-    for r in results:
+    for r in response.points:
         p = r.payload or {}
         hits.append({
             "content": p.get("content", ""),

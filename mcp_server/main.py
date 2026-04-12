@@ -2,6 +2,7 @@ import logging
 import os
 
 from mcp.server.sse import SseServerTransport
+from mcp.server.streamable_http import StreamableHTTPServerTransport
 from mcp.server import Server
 
 from mcp import types
@@ -120,6 +121,28 @@ async def _send_unauthorized(scope, receive, send):
     await send({"type": "http.response.body", "body": body})
 
 
+_http_transport = StreamableHTTPServerTransport(
+    mcp_session_id=None,
+    is_json_response_enabled=True,
+)
+
+import asyncio
+
+async def _run_http_server():
+    async with _http_transport.connect() as streams:
+        await server.run(
+            streams[0], streams[1], server.create_initialization_options()
+        )
+
+_http_task = None
+
+async def _ensure_http_server():
+    global _http_task
+    if _http_task is None:
+        _http_task = asyncio.ensure_future(_run_http_server())
+        await asyncio.sleep(0.1)
+
+
 async def app(scope, receive, send):
     if scope["type"] != "http":
         return
@@ -139,6 +162,12 @@ async def app(scope, receive, send):
             await _send_unauthorized(scope, receive, send)
             return
         await sse.handle_post_message(scope, receive, send)
+    elif path == "/mcp":
+        if not _check_auth(scope):
+            await _send_unauthorized(scope, receive, send)
+            return
+        await _ensure_http_server()
+        await _http_transport.handle_request(scope, receive, send)
     else:
         body = b"Not Found"
         await send({

@@ -116,3 +116,87 @@ def get_file_status(path: str) -> Dict[str, Any]:
         "modified_time": p.get("modified_time", 0),
         "file_type": p.get("file_type", ""),
     }
+
+
+def _outline_collection() -> str:
+    return os.environ.get("OUTLINE_QDRANT_COLLECTION", "outline_docs")
+
+
+def search_outline(
+    query_vector: List[float],
+    top_k: int = 5,
+    filter_collection_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    client = _get_client()
+    name = _outline_collection()
+
+    if not client.collection_exists(name):
+        return {"results": [], "total": 0, "query_vector_dim": len(query_vector)}
+
+    must = []
+    if filter_collection_id:
+        must.append(FieldCondition(key="collection_id", match=MatchValue(value=filter_collection_id)))
+
+    search_filter = Filter(must=must) if must else None
+
+    response = client.query_points(
+        collection_name=name,
+        query=query_vector,
+        limit=top_k,
+        query_filter=search_filter,
+        with_payload=True,
+    )
+
+    hits = []
+    for r in response.points:
+        p = r.payload or {}
+        hits.append({
+            "title": p.get("title", ""),
+            "outline_id": p.get("outline_id", ""),
+            "content": p.get("content", ""),
+            "score": r.score,
+            "chunk_index": p.get("chunk_index", 0),
+        })
+
+    return {"results": hits, "total": len(hits), "query_vector_dim": len(query_vector)}
+
+
+def list_outline_documents(
+    filter_collection_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    client = _get_client()
+    name = _outline_collection()
+
+    if not client.collection_exists(name):
+        return []
+
+    must = []
+    if filter_collection_id:
+        must.append(FieldCondition(key="collection_id", match=MatchValue(value=filter_collection_id)))
+
+    seen: Dict[str, Dict[str, Any]] = {}
+    offset = None
+    while True:
+        scroll_filter = Filter(must=must) if must else None
+        records, offset = client.scroll(
+            collection_name=name,
+            limit=100,
+            offset=offset,
+            scroll_filter=scroll_filter,
+            with_payload=["outline_id", "title", "collection_id", "updated_at"],
+        )
+        for r in records:
+            p = r.payload or {}
+            oid = p.get("outline_id", "")
+            if oid not in seen:
+                seen[oid] = {
+                    "outline_id": oid,
+                    "title": p.get("title", ""),
+                    "collection_id": p.get("collection_id", ""),
+                    "updated_at": p.get("updated_at", 0),
+                    "chunk_count": 0,
+                }
+            seen[oid]["chunk_count"] += 1
+        if offset is None:
+            break
+    return list(seen.values())

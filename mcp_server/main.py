@@ -6,7 +6,7 @@ from mcp.server.streamable_http import StreamableHTTPServerTransport
 from mcp.server import Server
 
 from mcp import types
-from .tools import search_library, list_indexed_files, get_file_status
+from .tools import search_library, list_indexed_files, get_file_status, search_outline, list_outline_documents
 
 log = logging.getLogger(__name__)
 
@@ -67,6 +67,29 @@ async def list_tools():
                 "required": ["path"],
             },
         ),
+        types.Tool(
+            name="search_outline",
+            description="Search Outline knowledge base documents using semantic similarity. Returns matching Markdown text chunks with document title and relevance score. Use this instead of mcp_outline_* for reading documents.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Search query text"},
+                    "top_k": {"type": "integer", "description": "Number of results (default 5)", "default": 5},
+                    "filter_collection_id": {"type": "string", "description": "Filter by Outline collection ID (optional)", "default": None},
+                },
+                "required": ["query"],
+            },
+        ),
+        types.Tool(
+            name="list_outline_documents",
+            description="List all indexed Outline documents with their titles, collection IDs, and chunk counts.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "filter_collection_id": {"type": "string", "description": "Filter by Outline collection ID (optional)", "default": None},
+                },
+            },
+        ),
     ]
 
 
@@ -106,6 +129,18 @@ async def call_tool(name: str, arguments: dict):
     elif name == "get_file_status":
         path = arguments["path"]
         result = get_file_status(path)
+        return [types.TextContent(type="text", text=str(result))]
+    elif name == "search_outline":
+        query = arguments["query"]
+        top_k = arguments.get("top_k", 5)
+        filter_collection_id = arguments.get("filter_collection_id")
+        query_vector = _embed_query(query)
+        result = search_outline(query_vector, top_k, filter_collection_id)
+        result["query"] = query
+        return [types.TextContent(type="text", text=str(result))]
+    elif name == "list_outline_documents":
+        filter_collection_id = arguments.get("filter_collection_id")
+        result = list_outline_documents(filter_collection_id)
         return [types.TextContent(type="text", text=str(result))]
     else:
         return [types.TextContent(type="text", text=f"Unknown tool: {name}")]

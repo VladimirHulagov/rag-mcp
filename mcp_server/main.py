@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 
@@ -121,15 +122,15 @@ async def call_tool(name: str, arguments: dict):
         query_vector = _embed_query(query)
         result = search_library(query_vector, top_k, filter_filename, filter_file_type)
         result["query"] = query
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False, default=str))]
     elif name == "list_indexed_files":
         filter_file_type = arguments.get("filter_file_type")
         result = list_indexed_files(filter_file_type)
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False, default=str))]
     elif name == "get_file_status":
         path = arguments["path"]
         result = get_file_status(path)
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False, default=str))]
     elif name == "search_outline":
         query = arguments["query"]
         top_k = arguments.get("top_k", 5)
@@ -137,11 +138,11 @@ async def call_tool(name: str, arguments: dict):
         query_vector = _embed_query(query)
         result = search_outline(query_vector, top_k, filter_collection_id)
         result["query"] = query
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False, default=str))]
     elif name == "list_outline_documents":
         filter_collection_id = arguments.get("filter_collection_id")
         result = list_outline_documents(filter_collection_id)
-        return [types.TextContent(type="text", text=str(result))]
+        return [types.TextContent(type="text", text=json.dumps(result, ensure_ascii=False, default=str))]
     else:
         return [types.TextContent(type="text", text=f"Unknown tool: {name}")]
 
